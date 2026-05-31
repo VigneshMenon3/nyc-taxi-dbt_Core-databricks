@@ -1,0 +1,65 @@
+with base as (
+    select * from {{ ref('int_trips_enriched') }}
+),
+
+-- get each rider's first trip month as their cohort
+first_trips as (
+    select
+        pickup_location_id                              as rider_id,
+        min(date_trunc('month', pickup_datetime))       as cohort_month
+    from base
+    group by pickup_location_id
+),
+
+-- join back to get all trips with cohort info
+trips_with_cohort as (
+    select
+        b.pickup_location_id                            as rider_id,
+        f.cohort_month,
+        date_trunc('month', b.pickup_datetime)          as trip_month
+    from base b
+    inner join first_trips f
+        on b.pickup_location_id = f.rider_id
+),
+
+-- calculate how many months after cohort each trip occurred
+cohort_periods as (
+    select
+        rider_id,
+        cohort_month,
+        trip_month,
+        datediff(month, cohort_month, trip_month)       as period_number
+    from trips_with_cohort
+),
+
+-- count distinct riders per cohort per period
+retention as (
+    select
+        cohort_month,
+        period_number,
+        count(distinct rider_id)                        as retained_riders
+    from cohort_periods
+    group by cohort_month, period_number
+),
+
+-- get cohort size (period 0 = starting cohort)
+cohort_sizes as (
+    select
+        cohort_month,
+        retained_riders                                 as cohort_size
+    from retention
+    where period_number = 0
+)
+
+select
+    r.cohort_month,
+    r.period_number,
+    r.retained_riders,
+    c.cohort_size,
+    round(r.retained_riders * 100.0 / c.cohort_size, 2) as retention_pct
+from retention r
+inner join cohort_sizes c
+    on r.cohort_month = c.cohort_month
+order by
+    r.cohort_month,
+    r.period_number

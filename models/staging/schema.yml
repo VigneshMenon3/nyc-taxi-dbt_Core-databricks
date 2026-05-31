@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: stg_yellow_trips
+    description: "Cleaned and standardized yellow taxi trips"
+    columns:
+      - name: vendor_id
+        description: "Taxi vendor: 1=Creative Mobile, 2=VeriFone"
+        tests:
+          - not_null
+      - name: pickup_datetime
+        tests:
+          - not_null
+      - name: trip_distance
+        tests:
+          - not_null
+      - name: total_amount
+        tests:
+          - not_null
+      - name: payment_type
+        tests:
+          - not_null
+        

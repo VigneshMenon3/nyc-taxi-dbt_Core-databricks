@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: nyc_taxi_raw
+    catalog: nyc_taxi_project
+    schema: nyc_taxi
+    tables:
+      - name: raw_yellow_trips
+        description: "Raw yellow taxi trips loaded from NYC TLC parquet files"
