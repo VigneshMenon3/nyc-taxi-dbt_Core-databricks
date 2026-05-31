@@ -1,5 +1,21 @@
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='trip_date_vendor_key',
+        on_schema_change='sync_all_columns'
+    )
+}}
+
 with base as (
     select * from {{ ref('int_trips_enriched') }}
+
+    {% if is_incremental() %}
+        -- on incremental runs, only process data newer than what we already have
+        where pickup_datetime > (
+            select max(trip_date) from {{ this }}
+        )
+    {% endif %}
 ),
 
 daily as (
@@ -7,6 +23,13 @@ daily as (
         date_trunc('day', pickup_datetime)                          as trip_date,
         vendor_id,
         day_of_week,
+
+        -- unique key for merge
+        concat(
+            cast(date_trunc('day', pickup_datetime) as string),
+            '_',
+            cast(vendor_id as string)
+        )                                                           as trip_date_vendor_key,
 
         -- volume metrics
         count(*)                                                    as total_trips,
@@ -26,27 +49,20 @@ daily as (
         round(avg(trip_duration_minutes), 2)                        as avg_duration_minutes,
 
         -- conditional aggregations
-        count(case when trip_category = 'long'   then 1 end)        as long_trips,
-        count(case when trip_category = 'medium' then 1 end)        as medium_trips,
-        count(case when trip_category = 'short'  then 1 end)        as short_trips,
+        count(case when trip_category = 'long'    then 1 end)       as long_trips,
+        count(case when trip_category = 'medium'  then 1 end)       as medium_trips,
+        count(case when trip_category = 'short'   then 1 end)       as short_trips,
 
         count(case when payment_label = 'credit_card' then 1 end)   as credit_card_trips,
         count(case when payment_label = 'cash'        then 1 end)   as cash_trips,
 
-        count(case when tip_category = 'no_tip'  then 1 end)        as no_tip_trips,
+        count(case when tip_category = 'no_tip'   then 1 end)       as no_tip_trips,
         count(case when tip_category = 'high_tip' then 1 end)       as high_tip_trips,
 
         count(case when time_of_day = 'morning'   then 1 end)       as morning_trips,
         count(case when time_of_day = 'afternoon' then 1 end)       as afternoon_trips,
         count(case when time_of_day = 'evening'   then 1 end)       as evening_trips,
-        count(case when time_of_day = 'night'     then 1 end)       as night_trips,
-
-        -- running revenue
-        round(sum(sum(total_amount)) over (
-            partition by vendor_id
-            order by date_trunc('day', pickup_datetime)
-            rows between unbounded preceding and current row
-        ), 2)                                                        as cumulative_revenue
+        count(case when time_of_day = 'night'     then 1 end)       as night_trips
 
     from base
     group by

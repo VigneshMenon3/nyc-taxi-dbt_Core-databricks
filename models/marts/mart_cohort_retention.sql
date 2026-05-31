@@ -1,8 +1,22 @@
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='cohort_period_key',
+        on_schema_change='sync_all_columns'
+    )
+}}
+
 with base as (
     select * from {{ ref('int_trips_enriched') }}
+
+    {% if is_incremental() %}
+        where pickup_datetime > (
+            select max(cohort_month) from {{ this }}
+        )
+    {% endif %}
 ),
 
--- get each rider's first trip month as their cohort
 first_trips as (
     select
         pickup_location_id                              as rider_id,
@@ -11,7 +25,6 @@ first_trips as (
     group by pickup_location_id
 ),
 
--- join back to get all trips with cohort info
 trips_with_cohort as (
     select
         b.pickup_location_id                            as rider_id,
@@ -22,7 +35,6 @@ trips_with_cohort as (
         on b.pickup_location_id = f.rider_id
 ),
 
--- calculate how many months after cohort each trip occurred
 cohort_periods as (
     select
         rider_id,
@@ -32,7 +44,6 @@ cohort_periods as (
     from trips_with_cohort
 ),
 
--- count distinct riders per cohort per period
 retention as (
     select
         cohort_month,
@@ -42,7 +53,6 @@ retention as (
     group by cohort_month, period_number
 ),
 
--- get cohort size (period 0 = starting cohort)
 cohort_sizes as (
     select
         cohort_month,
@@ -56,10 +66,16 @@ select
     r.period_number,
     r.retained_riders,
     c.cohort_size,
-    round(r.retained_riders * 100.0 / c.cohort_size, 2) as retention_pct
+    round(r.retained_riders * 100.0 / c.cohort_size, 2) as retention_pct,
+
+    -- unique key for merge
+    concat(
+        cast(r.cohort_month as string),
+        '_',
+        cast(r.period_number as string)
+    )                                                    as cohort_period_key
+
 from retention r
 inner join cohort_sizes c
     on r.cohort_month = c.cohort_month
-order by
-    r.cohort_month,
-    r.period_number
+order by r.cohort_month, r.period_number

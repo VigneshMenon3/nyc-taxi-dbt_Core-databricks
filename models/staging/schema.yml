@@ -11,6 +11,9 @@ models:
       - name: pickup_datetime
         tests:
           - not_null
+      - name: dropoff_datetime
+        tests:
+          - not_null
       - name: trip_distance
         tests:
           - not_null
@@ -20,4 +23,59 @@ models:
       - name: payment_type
         tests:
           - not_null
-        
+
+  - name: int_trips_enriched
+    description: "Enriched trips with window functions and categorizations"
+    columns:
+      - name: vendor_id
+        tests:
+          - not_null
+      - name: trip_category
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+              values: ['short', 'medium', 'long']
+      - name: tip_category
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['no_tip', 'low_tip', 'medium_tip', 'high_tip']
+      - name: time_of_day
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['morning', 'afternoon', 'evening', 'night']
+      - name: payment_label
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['credit_card', 'cash', 'no_charge', 'dispute', 'unknown']
+
+  - name: mart_daily_metrics
+    description: "Daily aggregated taxi metrics per vendor"
+    columns:
+      - name: trip_date_vendor_key
+        tests:
+          - not_null
+          - unique
+      - name: total_trips
+        tests:
+          - not_null
+      - name: total_revenue
+        tests:
+          - not_null
+
+  - name: mart_cohort_retention
+    description: "Monthly rider cohort retention analysis"
+    columns:
+      - name: cohort_period_key
+        tests:
+          - not_null
+          - unique
+      - name: retention_pct
+        tests:
+          - not_null
